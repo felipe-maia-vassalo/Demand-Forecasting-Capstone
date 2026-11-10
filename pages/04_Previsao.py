@@ -1,18 +1,23 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-from core.i18n import tr
+from core.i18n import tr, english
 
+import math
+import re
 import time
+import traceback
 
 import altair as alt
 import pandas as pd
 import streamlit as st
+
 from core import pipeline as pipe
 
 st.set_page_config(page_title=tr('Previsão'), page_icon="🔮", layout="wide")
 st.title(tr('🔮 Previsão'))
 
 ss = st.session_state
+ss.setdefault("is_running", False)
 ss.setdefault("last_result", None)
 
 # ===== série do upload
@@ -46,48 +51,180 @@ s_monthly = (
       .sort_index().asfreq("MS").interpolate("linear").bfill().ffill()
 )
 
-# A small search is useful for an interactive demo. Each run owns its settings.
-sample_loaded = ss.get("series_source") == "sample"
-st.sidebar.header(tr("⚙️ Configurações"))
-HORIZON = st.sidebar.selectbox(tr("Horizonte (meses)"), [6, 8, 12], key="forecast_horizon_widget")
-quick_search = st.sidebar.checkbox(tr("Busca rápida"), value=sample_loaded,
-                                   help=tr("Compara uma grade menor de modelos usando o mesmo pipeline. Desative para executar a busca completa."))
-do_log = st.sidebar.checkbox(tr("Aplicar log"), value=not sample_loaded)
-do_bootstrap = st.sidebar.checkbox(tr("Ativar bootstrap"), value=not sample_loaded)
-replicates = st.sidebar.slider(tr("Réplicas do bootstrap"), 1, 50, 20) if do_bootstrap else 0
+sample_mode = ss.get("series_source") == "sample"
+grid = pipe.search_grid(sample_mode)
+sizes = {
+    "Croston": len(grid["croston_alphas"]),
+    "SBA": len(grid["sba_alphas"]),
+    "TSB": len(grid["tsb_alpha_grid"]) * len(grid["tsb_beta_grid"]),
+    "RF": (len(grid["rf_lags_grid"]) * len(grid["rf_n_estimators_grid"])
+           * len(grid["rf_max_depth_grid"])),
+    "SARIMAX": math.prod(len(options) for options in grid["sarima_grid"].values()),
+}
+# ===== form (config)
+with st.form(key="previsao_form"):
+    st.sidebar.header(tr('⚙️ Configurações'))
 
-if st.button(tr("▶️ Rodar previsão"), type="primary"):
+    # Horizonte da previsão
+    HORIZON = st.sidebar.selectbox(tr('Horizonte (meses)'), [6, 8, 12], index=0)
+
+    # Controles de LOG/BOOTSTRAP
+    DO_LOG = st.sidebar.checkbox(tr('Aplicar log'), value=not sample_mode)
+    DO_BOOTSTRAP = st.sidebar.checkbox(tr('Ativar bootstrap'), value=not sample_mode)
+
+    # Salva só o horizonte (sem FAST_MODE)
+    ss["HORIZON"] = int(HORIZON)
+
+    # Limites das réplicas do bootstrap (sempre os “completos”)
+    max_boot, default_boot = 50, 20
+
+    if DO_BOOTSTRAP:
+        N_BOOTSTRAP = st.sidebar.slider(
+            tr('Réplicas do bootstrap'),
+            min_value=1,
+            max_value=max_boot,
+            value=default_boot,
+            step=1,
+            help=tr('Reduzir as réplicas acelera a execução, mas pode não encontrar o melhor modelo ideal.')
+        )
+        st.sidebar.caption(
+            tr('⚠️ **Menos réplicas** → roda mais rápido, mas **pode não encontrar** o melhor modelo.')
+        )
+    else:
+        N_BOOTSTRAP = 0
+
+    # Exibe o tamanho da grade usada nesta execução.
+    base = sum(sizes.values())
+
+    rounds_desc = ["original"]
+    if DO_LOG:
+        rounds_desc.append("log")
+    if DO_BOOTSTRAP:
+        rounds_desc.append(f"bootstrap×{N_BOOTSTRAP}")
+
+    st.caption(
+        tr('Configuração: combinações≈{0} | rodadas: {1}', max(1, base), ', '.join(rounds_desc))
+    )
+
+    submitted = st.form_submit_button(
+        tr('▶️ Rodar previsão'),
+        type="primary",
+        disabled=ss.is_running,
+    )
+
+# ===== console filtrado + progresso acumulativo (rodadas/famílias)
+prog = st.progress(0)
+prog_text = st.empty()
+log_box = st.expander(tr('📜 Console (passos essenciais)'), expanded=False)
+log_area = log_box.empty()
+progress_lines = []
+round_count = 1 + int(DO_LOG) + N_BOOTSTRAP
+total_weight = max(1, base * round_count)
+completed_weight = 0
+
+
+# Filter the original pipeline console before translating its display text.
+console_filter = re.compile(
+    r"PIPELINE INICIADO|^Params:|Realizando testes da série|^→ |bootstrap|"
+    r"===== CAMPEÃO|PIPELINE FINALIZADO|ERROR|EXCEPTION|Traceback", re.I
+)
+log_phrases = {
+    "PIPELINE INICIADO": "PIPELINE STARTED", "PIPELINE FINALIZADO": "PIPELINE FINISHED",
+    "Linhas totais de experimentos": "Total experiment rows",
+    "Realizando testes da série ORIGINAL": "Testing the original series",
+    "Realizando testes da série LOG-transformada": "Testing the log-transformed series",
+    "Realizando testes da SÉRIE SINTÉTICA": "Testing synthetic series",
+    "CAMPEÃO (critério: menor MAE; desempates por RMSE/soma/simplicidade)":
+        "BEST MODEL (lowest MAE; ties resolved by RMSE/sum/simplicity)",
+    "combinações": "combinations", "Testes": "Tests", "início": "start",
+    "fim em": "finished in", "Gerando": "Generating", "réplicas bootstrap": "bootstrap replicates",
+    "Concluídos testes": "Completed tests", "linhas": "rows", "progresso": "progress",
+}
+
+
+def show_message(message):
+    if not console_filter.search(message):
+        return
+    if english():
+        for pt, en in log_phrases.items():
+            message = message.replace(pt, en)
+    progress_lines.append(message)
+    log_area.text("\n".join(progress_lines[-250:]))
+
+
+def report_model(preprocessing, model):
+    global completed_weight
+    family = "RF" if model == "Random Forest" else model
+    message = tr("Comparando {0}", model) + f" ({preprocessing})"
+    progress = min(completed_weight / total_weight, 1.0)
+    prog.progress(progress)
+    prog_text.write(f"{progress:.0%} — {message}")
+    completed_weight += sizes.get(family, 0)
+
+
+# ===== execução (sempre reroda ao clicar)
+if submitted and not ss.is_running:
+    ss.is_running = True
+    ss.last_result = None
     try:
-        start = time.perf_counter()
-        rounds = 1 + int(do_log) + replicates
-        total_stages = (5 + int(pipe.KERAS_AVAILABLE)) * rounds
-        stages = []
-        progress = st.progress(0)
-        console = st.expander(tr("📜 Console (passos essenciais)"))
+        debug_info = {
+            "horizon": HORIZON, "seasonal_period": 12, "do_original": True,
+            "do_log": DO_LOG, "do_bootstrap": DO_BOOTSTRAP,
+            "n_bootstrap": N_BOOTSTRAP, "FAST_MODE": sample_mode,
+            "grid_sizes": sizes,
+        }
+        with st.expander(tr('🔎 Depuração — parâmetros efetivos'), expanded=False):
+            st.json(debug_info)
 
-        def report_model(preprocessing, model):
-            stages.append(model)
-            message = tr("Comparando {0}", model) + f" ({preprocessing})"
-            progress.progress(min((len(stages) - 1) / total_stages, 1.0), text=message)
-            console.write(message)
-
-        with st.spinner(tr("Executando pipeline…")):
-            result = pipe.run_full_pipeline(
-                s_monthly, horizon=HORIZON, seasonal_period=12,
-                do_log=do_log, do_bootstrap=do_bootstrap,
-                n_bootstrap=replicates, quick_search=quick_search, on_model=report_model,
+        t0 = time.perf_counter()
+        with st.spinner(tr('Executando pipeline…')), pipe.capture_run_log(show_message):
+            resultados = pipe.run_full_pipeline(
+                data_input=s_monthly, horizon=int(HORIZON), seasonal_period=12,
+                do_original=True, do_log=DO_LOG, do_bootstrap=DO_BOOTSTRAP,
+                n_bootstrap=N_BOOTSTRAP, bootstrap_block=24, save_dir=None,
+                quick_search=sample_mode, on_model=report_model,
             )
-        progress.progress(1.0, text=tr("100% — concluído"))
-        ss.last_result = result
-        ss["experiments_df"] = result
-        ss["forecast_committed"] = False
+        elapsed = time.perf_counter() - t0
+        prog.progress(100); prog_text.write(tr('100% — concluído'))
+        st.caption(tr('⏱️ Tempo de execução: {0}s', f'{elapsed:.1f}'))
+
+        # =========================================================
+        # Salva resultado “bruto” (experimentos) e artefatos úteis
+        # =========================================================
         for key in ("forecast_df", "forecast_h", "mps_table", "mps_detail",
                     "mps_tbl_display", "mps_costs_baseline"):
             ss.pop(key, None)
-        st.caption(tr("⏱️ Tempo de execução: {0}s", f"{time.perf_counter() - start:.1f}"))
-    except Exception as error:
-        st.error(tr("Falha ao executar a previsão. Traceback abaixo:"))
-        st.exception(error)
+        ss["forecast_committed"] = False
+        ss.last_result = resultados
+
+        # Experimentos (opcional para a página 07 e download)
+        exp_df = None
+        if isinstance(resultados, pd.DataFrame) and not resultados.empty:
+            exp_df = resultados.copy()
+        elif hasattr(resultados, "attrs"):
+            for key in ["experiments", "experiments_df", "resultados", "table", "exp"]:
+                val = resultados.attrs.get(key)
+                if isinstance(val, pd.DataFrame) and not val.empty:
+                    exp_df = val.copy(); break
+        if exp_df is None and isinstance(resultados, dict):
+            for key in ["experiments", "experiments_df", "resultados", "table", "exp"]:
+                val = resultados.get(key)
+                if isinstance(val, pd.DataFrame) and not val.empty:
+                    exp_df = val.copy(); break
+
+        if isinstance(exp_df, pd.DataFrame) and not exp_df.empty:
+            ss["exp_table"] = exp_df.copy()
+            ss["experiments_df"] = exp_df.copy()
+            ss["experiments_csv"] = exp_df.to_csv(index=False).encode("utf-8")
+            ss["experiments_ready"] = True
+        else:
+            ss["experiments_ready"] = False
+
+    except Exception:
+        st.error(tr('Falha ao executar a previsão. Traceback abaixo:'))
+        st.code("\n".join(traceback.format_exc().splitlines()), language="text")
+    finally:
+        ss.is_running = False
 
 # ===== render
 res = ss.get("last_result")

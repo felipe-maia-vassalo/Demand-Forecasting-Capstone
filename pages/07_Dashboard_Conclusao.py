@@ -193,7 +193,7 @@ with tabs[0]:
 with tabs[1]:
     st.subheader(tr('Diagnóstico de vieses da previsão'))
 
-    st.markdown(tr('> O **viés** de previsão mede se o modelo tende a **superestimar** ou **subestimar** os valores reais ao longo do tempo.  \n    > Quando o viés é **positivo**, o modelo prevê valores maiores do que o realizado; quando é **negativo**, prevê valores menores.  \n    > Um modelo sem viés apresenta erros que oscilam em torno de zero, indicando previsões equilibradas sem tendência sistemática.'))
+    st.markdown(tr('\n    > O **viés** de previsão mede se o modelo tende a **superestimar** ou **subestimar** os valores reais ao longo do tempo.  \n    > Quando o viés é **positivo**, o modelo prevê valores maiores do que o realizado; quando é **negativo**, prevê valores menores.  \n    > Um modelo sem viés apresenta erros que oscilam em torno de zero, indicando previsões equilibradas sem tendência sistemática.\n    '))
 
 
     # 1) Tenta recuperar um backtest com ds, y_true, y_pred
@@ -275,7 +275,7 @@ with tabs[1]:
 
         # 5) Explicação fixa e objetiva
         st.markdown(
-            tr('**Como ler o gráfico acima:**  \n- A linha mostra o **erro** em cada período (previsto − real).  \n- **Acima de 0** → o modelo **superestimou**; **abaixo de 0** → **subestimou**.  \n- Quando os pontos ficam próximos de 0 e alternam entre positivo/negativo, **não há viés sistemático**.  \n- Deslocamentos persistentes para cima/baixo sugerem **viés** e pedem recalibração do modelo (parâmetros, sazonalidade ou tendência).')
+            tr('\n**Como ler o gráfico acima:**  \n- A linha mostra o **erro** em cada período (previsto − real).  \n- **Acima de 0** → o modelo **superestimou**; **abaixo de 0** → **subestimou**.  \n- Quando os pontos ficam próximos de 0 e alternam entre positivo/negativo, **não há viés sistemático**.  \n- Deslocamentos persistentes para cima/baixo sugerem **viés** e pedem recalibração do modelo (parâmetros, sazonalidade ou tendência).\n            ')
         )
 
 

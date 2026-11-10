@@ -15,10 +15,6 @@ if "ts_df_norm" not in st.session_state:
     st.stop()
 
 # ---------------------------------------------------------------------
-if st.session_state.get("series_source") == "sample":
-    st.caption(tr("Exemplo sintético · 72 meses"))
-    st.page_link("pages/04_Previsao.py", label=tr("Ir direto para a previsão"), icon="🔮")
-
 # 0) Entrada (ds, y) do Passo 1
 # ---------------------------------------------------------------------
 df = st.session_state["ts_df_norm"].copy()  # colunas: ds (ex.: 'Set/25'), y (quantidade)

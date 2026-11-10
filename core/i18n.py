@@ -9,11 +9,11 @@ with Path(__file__).with_name("en.json").open(encoding="utf-8") as catalog:
 
 
 def english():
-    return st.session_state.get("language", "English") == "English"
+    return st.session_state.get("language", "Português") == "English"
 
 
 def tr(portuguese, *values):
-    text = ENGLISH.get(portuguese, portuguese) if english() else portuguese
+    text = ENGLISH.get(portuguese, ENGLISH.get(portuguese.strip(), portuguese)) if english() else portuguese
     return text.format(*values) if values else text
 
 

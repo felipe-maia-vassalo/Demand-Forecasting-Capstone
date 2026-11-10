@@ -1,28 +1,19 @@
 # pages/01_Upload.py
 # Página 1 — Upload da série temporal (mensal)
 from __future__ import annotations
-from core.i18n import tr, month_label
-from core.sample import load_sample, sample_workbook, set_series
+from core.i18n import tr, month_label, english
+from core.sample import set_series
 import pandas as pd
 import numpy as np
 import streamlit as st
 
 st.title(tr('📤 Upload da Série Temporal'))
 
-st.caption(tr("Explore seis anos de demanda mensal de cadeiras escolares, de janeiro de 2020 a dezembro de 2025. Os 72 valores são sintéticos."))
-left, right = st.columns(2)
-if left.button(tr("Carregar série de exemplo")):
-    load_sample(st.session_state)
-    st.switch_page("pages/02_Serie_Temporal.py")
-right.download_button(tr("Baixar exemplo em Excel"), sample_workbook(),
-                      file_name="synthetic_classroom_chair_demand.xlsx",
-                      mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-st.markdown(tr('**Antes de enviar, observe:**\n1. O arquivo deve ter **uma coluna de datas** (pode se chamar **ds, data, date, dt, mes, month, period...**)  \n2. A **coluna de quantidades** deve ser a **coluna do produto** (ex.: *Cadeira de ripas*). O **nome da coluna será usado como nome do item** nas próximas etapas.  \n3. É importante ter **pelo menos 50 observações**.  \n4. O arquivo deve ser **Excel** (`.xlsx` ou `.xls`).'))
+st.markdown(tr('\n**Antes de enviar, observe:**\n1. O arquivo deve ter **uma coluna de datas** (pode se chamar **ds, data, date, dt, mes, month, period...**)  \n2. A **coluna de quantidades** deve ser a **coluna do produto** (ex.: *Cadeira de ripas*). O **nome da coluna será usado como nome do item** nas próximas etapas.  \n3. É importante ter **pelo menos 50 observações**.  \n4. O arquivo deve ser **Excel** (`.xlsx` ou `.xls`).  \n'))
 
 st.divider()
 st.subheader(tr('Fluxo deste artefato'))
-st.markdown(tr('1. **Enviar série temporal** (Excel com 1 coluna de data e 1 coluna de quantidades).  \n2. **Análise da série temporal** (decomposição, sazonalidade, tendências, outliers).\n3. Gerar **previsão (6/8/12 meses)** com o melhor modelo.  \n4. Construir **MPS** para apoiar o PCP.  \n5. Exibir **dashboards** para auxílio na **tomada de decisões**.'))
+st.markdown(tr('\n1. **Enviar série temporal** (Excel com 1 coluna de data e 1 coluna de quantidades).  \n2. **Análise da série temporal** (decomposição, sazonalidade, tendências, outliers).\n3. Gerar **previsão (6/8/12 meses)** com o melhor modelo.  \n4. Construir **MPS** para apoiar o PCP.  \n5. Exibir **dashboards** para auxílio na **tomada de decisões**.\n'))
 
 st.divider()
 st.subheader(tr('Envio do Excel (data + coluna do produto)'))
@@ -187,7 +178,11 @@ if file:
 
     # exibição no Streamlit
     st.success(tr('Arquivo válido! Série mensal preparada para **{0}** 👇', product_name))
-    st.dataframe(monthly.assign(ds_label=monthly["ds_label"].map(month_label))[["ds_label", "y"]].rename(columns={"ds_label": tr("Mês"), "y": tr("Quantidade")}), use_container_width=True)
+    preview = monthly[["ds_label", "y"]].copy()
+    if english():
+        preview["ds_label"] = preview["ds_label"].map(month_label)
+        preview.columns = ["Month", "Quantity"]
+    st.dataframe(preview, use_container_width=True)
 
     set_series(st.session_state, monthly, product_name, "upload")
 

@@ -16,6 +16,8 @@ Saídas:
 """
 import re
 import os, time, warnings, itertools, sys, datetime as dt
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Tuple, Dict, List, Optional, Callable, Union
 
@@ -34,6 +36,19 @@ warnings.filterwarnings("ignore")
 # ============================
 # LOGGING UTIL
 # ============================
+_log_listener = ContextVar("forecast_log_listener", default=None)
+
+
+@contextmanager
+def capture_run_log(listener):
+    """Route log messages from this run to its own Streamlit session."""
+    token = _log_listener.set(listener)
+    try:
+        yield
+    finally:
+        _log_listener.reset(token)
+
+
 def _now():
     """Retorna horário hh:mm:ss para prefixar logs."""
     return dt.datetime.now().strftime("%H:%M:%S")
@@ -45,7 +60,11 @@ def log(msg: str):
     🔌 Streamlit hint:
     - troque por `st.write(msg)` ou acumule mensagens num buffer e mostre no app.
     """
-    print(f"[{_now()}] {msg}", flush=True)
+    listener = _log_listener.get()
+    if listener is None:
+        print(f"[{_now()}] {msg}", flush=True)
+    else:
+        listener(msg)
 
 class Timer:
     """
@@ -468,6 +487,20 @@ class ModelResult:
     mae: float; mape: float; rmse: float; smape_: float
     train_size: int; test_size: int; runtime_s: float
 
+def search_grid(quick_search=False):
+    """Parameter grid used by both the search and its on-screen summary."""
+    return {
+        "croston_alphas": [0.1, 0.3] if quick_search else CROSTON_ALPHAS,
+        "sba_alphas": [0.1, 0.3] if quick_search else SBA_ALPHAS,
+        "tsb_alpha_grid": [0.1] if quick_search else TSB_ALPHA_GRID,
+        "tsb_beta_grid": [0.1, 0.3] if quick_search else TSB_BETA_GRID,
+        "rf_lags_grid": [6, 12] if quick_search else RF_LAGS_GRID,
+        "rf_n_estimators_grid": [50] if quick_search else RF_N_ESTIMATORS_GRID,
+        "rf_max_depth_grid": [5] if quick_search else RF_MAX_DEPTH_GRID,
+        "sarima_grid": {"p": [0, 1], "d": [0], "q": [0, 1], "P": [0], "D": [1], "Q": [0]} if quick_search else SARIMA_GRID,
+    }
+
+
 def evaluate_models_on_series(
     base_series: pd.Series, horizon: int, seasonal_period: int,
     preprocess_label: str, preprocess_params: str,
@@ -482,14 +515,15 @@ def evaluate_models_on_series(
     Retorna lista de ModelResult (uma linha por combinação de hiperparâmetros/modelo).
     """
 
-    croston_alphas = [0.1, 0.3] if quick_search else CROSTON_ALPHAS
-    sba_alphas = [0.1, 0.3] if quick_search else SBA_ALPHAS
-    tsb_alpha_grid = [0.1] if quick_search else TSB_ALPHA_GRID
-    tsb_beta_grid = [0.1, 0.3] if quick_search else TSB_BETA_GRID
-    rf_lags_grid = [6, 12] if quick_search else RF_LAGS_GRID
-    rf_n_estimators_grid = [50] if quick_search else RF_N_ESTIMATORS_GRID
-    rf_max_depth_grid = [5] if quick_search else RF_MAX_DEPTH_GRID
-    sarima_grid = {"p": [0, 1], "d": [0], "q": [0, 1], "P": [0], "D": [1], "Q": [0]} if quick_search else SARIMA_GRID
+    grid = search_grid(quick_search)
+    croston_alphas = grid["croston_alphas"]
+    sba_alphas = grid["sba_alphas"]
+    tsb_alpha_grid = grid["tsb_alpha_grid"]
+    tsb_beta_grid = grid["tsb_beta_grid"]
+    rf_lags_grid = grid["rf_lags_grid"]
+    rf_n_estimators_grid = grid["rf_n_estimators_grid"]
+    rf_max_depth_grid = grid["rf_max_depth_grid"]
+    sarima_grid = grid["sarima_grid"]
 
     with Timer(f"Testes — {preprocess_label} ({preprocess_params})"):
         # 1) aplica transformação (se houver) e faz sanitização básica

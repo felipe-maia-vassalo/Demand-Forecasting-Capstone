@@ -1,37 +1,36 @@
 # pages/01_Upload.py
 # Página 1 — Upload da série temporal (mensal)
 from __future__ import annotations
+from core.i18n import tr, month_label
+from core.sample import load_sample, sample_workbook, set_series
 import pandas as pd
 import numpy as np
 import streamlit as st
 
-st.title("📤 Upload da Série Temporal")
+st.title(tr('📤 Upload da Série Temporal'))
 
-st.markdown("""
-**Antes de enviar, observe:**
-1. O arquivo deve ter **uma coluna de datas** (pode se chamar **ds, data, date, dt, mes, month, period...**)  
-2. A **coluna de quantidades** deve ser a **coluna do produto** (ex.: *Cadeira de ripas*). O **nome da coluna será usado como nome do item** nas próximas etapas.  
-3. É importante ter **pelo menos 50 observações**.  
-4. O arquivo deve ser **Excel** (`.xlsx` ou `.xls`).  
-""")
+st.caption(tr("Explore seis anos de demanda mensal de cadeiras escolares, de janeiro de 2020 a dezembro de 2025. Os 72 valores são sintéticos."))
+left, right = st.columns(2)
+if left.button(tr("Carregar série de exemplo")):
+    load_sample(st.session_state)
+    st.switch_page("pages/02_Serie_Temporal.py")
+right.download_button(tr("Baixar exemplo em Excel"), sample_workbook(),
+                      file_name="synthetic_classroom_chair_demand.xlsx",
+                      mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-st.divider()
-st.subheader("Fluxo deste artefato")
-st.markdown("""
-1. **Enviar série temporal** (Excel com 1 coluna de data e 1 coluna de quantidades).  
-2. **Análise da série temporal** (decomposição, sazonalidade, tendências, outliers).
-3. Gerar **previsão (6/8/12 meses)** com o melhor modelo.  
-4. Construir **MPS** para apoiar o PCP.  
-5. Exibir **dashboards** para auxílio na **tomada de decisões**.
-""")
+st.markdown(tr('**Antes de enviar, observe:**\n1. O arquivo deve ter **uma coluna de datas** (pode se chamar **ds, data, date, dt, mes, month, period...**)  \n2. A **coluna de quantidades** deve ser a **coluna do produto** (ex.: *Cadeira de ripas*). O **nome da coluna será usado como nome do item** nas próximas etapas.  \n3. É importante ter **pelo menos 50 observações**.  \n4. O arquivo deve ser **Excel** (`.xlsx` ou `.xls`).'))
 
 st.divider()
-st.subheader("Envio do Excel (data + coluna do produto)")
+st.subheader(tr('Fluxo deste artefato'))
+st.markdown(tr('1. **Enviar série temporal** (Excel com 1 coluna de data e 1 coluna de quantidades).  \n2. **Análise da série temporal** (decomposição, sazonalidade, tendências, outliers).\n3. Gerar **previsão (6/8/12 meses)** com o melhor modelo.  \n4. Construir **MPS** para apoiar o PCP.  \n5. Exibir **dashboards** para auxílio na **tomada de decisões**.'))
+
+st.divider()
+st.subheader(tr('Envio do Excel (data + coluna do produto)'))
 
 file = st.file_uploader(
-    "Selecione seu arquivo Excel",
+    tr('Selecione seu arquivo Excel'),
     type=["xlsx", "xls"],
-    help="Uma coluna de datas (ds, data, date, dt, mes...) e outra coluna com as quantidades do produto (o nome da coluna de quantidades será o nome do item)."
+    help=tr('Uma coluna de datas (ds, data, date, dt, mes...) e outra coluna com as quantidades do produto (o nome da coluna de quantidades será o nome do item).')
 )
 
 # ---- utilidades ----
@@ -79,25 +78,25 @@ if file:
     try:
         df_in = pd.read_excel(file)
     except Exception as e:
-        st.error(f"Não foi possível ler o Excel: {e}")
+        st.error(tr('Não foi possível ler o Excel: {0}', e))
         st.stop()
 
-    st.write("**Pré-visualização (primeiras linhas):**")
+    st.write(tr('**Pré-visualização (primeiras linhas):**'))
     st.dataframe(df_in.head(20), use_container_width=True)
 
     if df_in.empty or df_in.shape[1] < 2:
-        st.error("O arquivo deve ter **ao menos 2 colunas**: uma de **data** e outra de **quantidades** do produto.")
+        st.error(tr('O arquivo deve ter **ao menos 2 colunas**: uma de **data** e outra de **quantidades** do produto.'))
         st.stop()
 
     # ---- detecção automática das colunas ----
     auto_date_col  = pick_date_col(df_in)
     auto_value_col = pick_value_col(df_in, auto_date_col)
 
-    st.markdown("### Mapeamento das colunas")
+    st.markdown(tr('### Mapeamento das colunas'))
     c1, c2 = st.columns(2)
     with c1:
         date_col = st.selectbox(
-            "Selecione a coluna de **datas**",
+            tr('Selecione a coluna de **datas**'),
             options=list(df_in.columns),
             index=(list(df_in.columns).index(auto_date_col) if auto_date_col in df_in.columns else 0)
         )
@@ -107,7 +106,7 @@ if file:
         if auto_value_col in df_in.columns:
             default_value_idx = list(df_in.columns).index(auto_value_col)
         value_col = st.selectbox(
-            "Selecione a coluna de **quantidades (produto)**",
+            tr('Selecione a coluna de **quantidades (produto)**'),
             options=[c for c in df_in.columns if c != date_col] or list(df_in.columns),
             index=default_value_idx if default_value_idx < len([c for c in df_in.columns if c != date_col]) else 0
         )
@@ -115,7 +114,7 @@ if file:
     # ---- validações básicas ----
     problems = []
     if date_col is None or value_col is None:
-        problems.append("Não foi possível identificar coluna de data e/ou de quantidades.")
+        problems.append(tr('Não foi possível identificar coluna de data e/ou de quantidades.'))
     if problems:
         st.error(" | ".join(problems))
         st.stop()
@@ -133,9 +132,13 @@ if file:
 
     df = df.dropna(subset=["ds", "y"]).reset_index(drop=True)
 
+    if df.empty:
+        st.error(tr("Nenhuma linha válida de data e quantidade."))
+        st.stop()
+
     # checagem de tamanho mínimo na granularidade original
     if len(df) < 50:
-        st.warning("A série tem menos de **50 observações** na granularidade original. Considere enviar um histórico maior para melhor robustez.")
+        st.warning(tr('A série tem menos de **50 observações** na granularidade original. Considere enviar um histórico maior para melhor robustez.'))
 
     # ---- normaliza para mês (SEM SOMAR) ----
     df["month"] = df["ds"].dt.to_period("M").dt.to_timestamp()
@@ -148,21 +151,21 @@ if file:
             .reset_index(drop=True)
         )
     else:
-        st.warning("Detectei mais de uma linha no mesmo mês. Vou consolidar SEM somar.")
+        st.warning(tr('Detectei mais de uma linha no mesmo mês. Vou consolidar SEM somar.'))
 
         agg_mode = st.selectbox(
-            "Como consolidar valores quando houver duplicidade no mesmo mês?",
-            options=["último", "primeiro", "média"],
+            tr('Como consolidar valores quando houver duplicidade no mesmo mês?'),
+            options=[tr('último'), tr('primeiro'), tr('média')],
             index=0
         )
 
-        if agg_mode == "último":
+        if agg_mode == tr('último'):
             monthly = (
                 df.sort_values("ds")
                 .groupby("month", as_index=False)["y"].last()
                 .sort_values("month")
             )
-        elif agg_mode == "primeiro":
+        elif agg_mode == tr('primeiro'):
             monthly = (
                 df.sort_values("ds")
                 .groupby("month", as_index=False)["y"].first()
@@ -183,27 +186,14 @@ if file:
     )
 
     # exibição no Streamlit
-    st.success(f"Arquivo válido! Série mensal preparada para **{product_name}** 👇")
-    st.dataframe(monthly[["ds_label", "y"]], use_container_width=True)
+    st.success(tr('Arquivo válido! Série mensal preparada para **{0}** 👇', product_name))
+    st.dataframe(monthly.assign(ds_label=monthly["ds_label"].map(month_label))[["ds_label", "y"]].rename(columns={"ds_label": tr("Mês"), "y": tr("Quantidade")}), use_container_width=True)
 
-    # salvar no estado COM ds datetime
-    st.session_state["ts_df_norm"] = monthly[["ds", "y"]].copy()
-
-
-
-    # ---- guarda no estado para as próximas etapas ----
-    st.session_state["ts_df_norm"]   = monthly            # série mensal normalizada (ds,y)
-    st.session_state["upload_ok"]    = True
-    st.session_state["product_name"] = product_name       # nome do item/produto (virá do nome da coluna)
-
-    # Invalida previsões anteriores (obriga a salvar nova no Passo 2)
-    st.session_state.pop("forecast_df", None)
-    st.session_state.pop("forecast_h", None)
-    st.session_state["forecast_committed"] = False
+    set_series(st.session_state, monthly, product_name, "upload")
 
     st.info(
-        "Série carregada. Siga para a próxima página."
+        tr('Série carregada. Siga para a próxima página.')
     )
-    st.page_link("pages/02_Serie_Temporal.py", label="➡️ Seguir para Análise da Série Temporal")
+    st.page_link("pages/02_Serie_Temporal.py", label=tr('➡️ Seguir para Análise da Série Temporal'))
 else:
-    st.info("Envie um Excel com **uma coluna de datas** e **uma coluna de quantidades do produto** (o nome da coluna de quantidades será usado como **nome do item**).")
+    st.info(tr('Envie um Excel com **uma coluna de datas** e **uma coluna de quantidades do produto** (o nome da coluna de quantidades será usado como **nome do item**).'))

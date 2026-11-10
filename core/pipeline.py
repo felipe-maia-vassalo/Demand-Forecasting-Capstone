@@ -472,13 +472,24 @@ def evaluate_models_on_series(
     base_series: pd.Series, horizon: int, seasonal_period: int,
     preprocess_label: str, preprocess_params: str,
     forward_transform: Optional[Callable[[pd.Series], pd.Series]] = None,
-    inverse_transform: Optional[Callable[[np.ndarray], np.ndarray]] = None
+    inverse_transform: Optional[Callable[[np.ndarray], np.ndarray]] = None,
+    quick_search: bool = False,
+    on_model: Optional[Callable[[str, str], None]] = None,
 ) -> List[ModelResult]:
     """
     Executa todos os modelos sobre `base_series`, já aplicando (ou não) uma transformação.
     Se `inverse_transform` é fornecida, as métricas são calculadas na escala original (recomendado).
     Retorna lista de ModelResult (uma linha por combinação de hiperparâmetros/modelo).
     """
+
+    croston_alphas = [0.1, 0.3] if quick_search else CROSTON_ALPHAS
+    sba_alphas = [0.1, 0.3] if quick_search else SBA_ALPHAS
+    tsb_alpha_grid = [0.1] if quick_search else TSB_ALPHA_GRID
+    tsb_beta_grid = [0.1, 0.3] if quick_search else TSB_BETA_GRID
+    rf_lags_grid = [6, 12] if quick_search else RF_LAGS_GRID
+    rf_n_estimators_grid = [50] if quick_search else RF_N_ESTIMATORS_GRID
+    rf_max_depth_grid = [5] if quick_search else RF_MAX_DEPTH_GRID
+    sarima_grid = {"p": [0, 1], "d": [0], "q": [0, 1], "P": [0], "D": [1], "Q": [0]} if quick_search else SARIMA_GRID
 
     with Timer(f"Testes — {preprocess_label} ({preprocess_params})"):
         # 1) aplica transformação (se houver) e faz sanitização básica
@@ -503,8 +514,10 @@ def evaluate_models_on_series(
             return eval_metrics(y_true, y_pred)
 
         # ---- CROSTON
-        log(f"→ Croston: {len(CROSTON_ALPHAS)} alphas")
-        for j, alpha in enumerate(CROSTON_ALPHAS, 1):
+        if on_model:
+            on_model(preprocess_label, "Croston")
+        log(f"→ Croston: {len(croston_alphas)} alphas")
+        for j, alpha in enumerate(croston_alphas, 1):
             t0 = time.time()
             # walk-forward simples: a cada passo, prevê 1 e anexa o valor real
             hist = hist_all.copy(); preds = []
@@ -519,12 +532,14 @@ def evaluate_models_on_series(
             results.append(ModelResult(preprocess_label, preprocess_params, "Croston", f"alpha={alpha}",
                                        mets["MAE"], mets["MAPE"], mets["RMSE"], mets["sMAPE"],
                                        len(s_model)-horizon, horizon, runtime))
-            if j == 1 or j == len(CROSTON_ALPHAS):
-                log(f"… Croston progresso {j}/{len(CROSTON_ALPHAS)}")
+            if j == 1 or j == len(croston_alphas):
+                log(f"… Croston progresso {j}/{len(croston_alphas)}")
 
         # ---- SBA
-        log(f"→ SBA: {len(SBA_ALPHAS)} alphas")
-        for j, alpha in enumerate(SBA_ALPHAS, 1):
+        if on_model:
+            on_model(preprocess_label, "SBA")
+        log(f"→ SBA: {len(sba_alphas)} alphas")
+        for j, alpha in enumerate(sba_alphas, 1):
             t0 = time.time()
             hist = hist_all.copy(); preds = []
             for i in range(horizon):
@@ -538,15 +553,17 @@ def evaluate_models_on_series(
             results.append(ModelResult(preprocess_label, preprocess_params, "SBA", f"alpha={alpha}",
                                        mets["MAE"], mets["MAPE"], mets["RMSE"], mets["sMAPE"],
                                        len(s_model)-horizon, horizon, runtime))
-            if j == 1 or j == len(SBA_ALPHAS):
-                log(f"… SBA progresso {j}/{len(SBA_ALPHAS)}")
+            if j == 1 or j == len(sba_alphas):
+                log(f"… SBA progresso {j}/{len(sba_alphas)}")
 
         # ---- TSB
-        tot_tsb = len(TSB_ALPHA_GRID) * len(TSB_BETA_GRID)
+        if on_model:
+            on_model(preprocess_label, "TSB")
+        tot_tsb = len(tsb_alpha_grid) * len(tsb_beta_grid)
         log(f"→ TSB: {tot_tsb} combinações (alpha x beta)")
         step = 0
-        for alpha in TSB_ALPHA_GRID:
-            for beta in TSB_BETA_GRID:
+        for alpha in tsb_alpha_grid:
+            for beta in tsb_beta_grid:
                 step += 1
                 t0 = time.time()
                 hist = hist_all.copy(); preds = []
@@ -566,12 +583,14 @@ def evaluate_models_on_series(
                     log(f"… TSB progresso {step}/{tot_tsb}")
 
         # ---- RandomForest
-        tot_rf = len(RF_LAGS_GRID) * len(RF_N_ESTIMATORS_GRID) * len(RF_MAX_DEPTH_GRID)
+        if on_model:
+            on_model(preprocess_label, "Random Forest")
+        tot_rf = len(rf_lags_grid) * len(rf_n_estimators_grid) * len(rf_max_depth_grid)
         log(f"→ RandomForest: {tot_rf} combinações (lags x n_estimators x max_depth)")
         cnt = 0
-        for k in RF_LAGS_GRID:
-            for n_est in RF_N_ESTIMATORS_GRID:
-                for max_depth in RF_MAX_DEPTH_GRID:
+        for k in rf_lags_grid:
+            for n_est in rf_n_estimators_grid:
+                for max_depth in rf_max_depth_grid:
                     cnt += 1
                     lags = list(range(1, k+1))
                     df_sup = make_supervised_from_series(s_model, lags)
@@ -599,8 +618,10 @@ def evaluate_models_on_series(
                         log(f"… RF progresso {cnt}/{tot_rf}")
 
         # ---- SARIMAX
-        combos = list(itertools.product(SARIMA_GRID["p"], SARIMA_GRID["d"], SARIMA_GRID["q"],
-                                        SARIMA_GRID["P"], SARIMA_GRID["D"], SARIMA_GRID["Q"]))
+        if on_model:
+            on_model(preprocess_label, "SARIMAX")
+        combos = list(itertools.product(sarima_grid["p"], sarima_grid["d"], sarima_grid["q"],
+                                        sarima_grid["P"], sarima_grid["D"], sarima_grid["Q"]))
         log(f"→ SARIMAX: {len(combos)} combinações")
         y_train = s_model.iloc[:-horizon]; y_test  = s_model.iloc[-horizon:]
         for i, (p,d,q,P,D,Q) in enumerate(combos, 1):
@@ -627,6 +648,8 @@ def evaluate_models_on_series(
 
         # ---- LSTM (se disponível)
         if KERAS_AVAILABLE:
+            if on_model:
+                on_model(preprocess_label, "LSTM")
             lstm_combos = [(6,30,16),(12,30,16)]
             log(f"→ LSTM: {len(lstm_combos)} combinações")
             for c_idx, (window,epochs,batch) in enumerate(lstm_combos, 1):
@@ -1032,7 +1055,8 @@ def run_full_pipeline(
     horizon: int = 6, seasonal_period: int = 12,
     do_original: bool = True, do_log: bool = True, do_bootstrap: bool = True,
     n_bootstrap: int = 20, bootstrap_block: int = 24,
-    save_dir: Optional[str] = None
+    save_dir: Optional[str] = None, quick_search: bool = False,
+    on_model: Optional[Callable[[str, str], None]] = None,
 ) -> pd.DataFrame:
     """
     Roda o pipeline completo sobre uma única série:
@@ -1059,7 +1083,7 @@ def run_full_pipeline(
         all_results += evaluate_models_on_series(
             base_series=base_series, horizon=horizon, seasonal_period=seasonal_period,
             preprocess_label="original", preprocess_params="-",
-            forward_transform=None, inverse_transform=None
+            forward_transform=None, inverse_transform=None, quick_search=quick_search, on_model=on_model
         )
 
     # LOG + ε
@@ -1070,7 +1094,7 @@ def run_full_pipeline(
         all_results += evaluate_models_on_series(
             base_series=base_series, horizon=horizon, seasonal_period=seasonal_period,
             preprocess_label="log", preprocess_params=params_txt,
-            forward_transform=fwd, inverse_transform=inv
+            forward_transform=fwd, inverse_transform=inv, quick_search=quick_search, on_model=on_model
         )
 
     # BOOTSTRAP
@@ -1089,7 +1113,7 @@ def run_full_pipeline(
             all_results += evaluate_models_on_series(
                 base_series=s_rep, horizon=horizon, seasonal_period=seasonal_period,
                 preprocess_label="bootstrap", preprocess_params=params_txt,
-                forward_transform=None, inverse_transform=None
+                forward_transform=None, inverse_transform=None, quick_search=quick_search, on_model=on_model
             )
 
     # Consolida a lista de ModelResult em DataFrame de experimentos
@@ -1117,8 +1141,7 @@ def run_full_pipeline(
     if prep.startswith("log"):
         # reaproveita epsilon/shift do texto; se não achar, recalcula
         fwd_transform, inv_transform, _ = _log_fwd_inv_from_params(
-            load_series(data_input) if not isinstance(data_input, (pd.Series, pd.DataFrame)) else ensure_monthly_series(pd.DataFrame({"ds": base_series.index, "y": base_series.values}))
-            if False else base_series,  # base_series já existe
+            base_series,
             str(champion.get("preprocess_params",""))
         )
 
@@ -1145,44 +1168,6 @@ def run_full_pipeline(
         df_out.attrs["backtest"] = None
         df_out.attrs["experiments_df"] = df_out.copy()
         log(f"[WARN] Não foi possível gerar forecast/backtest do campeão: {e}")
-    # === /CAMPEÃO + FORECAST + BACKTEST ===
-
-
-        # Seleção do CAMPEÃO segundo FPP3 (menor MAE; desempates RMSE, soma, simplicidade)
-        champion = select_champion(df_out)
-        log("===== CAMPEÃO (critério: menor MAE; desempates por RMSE/soma/simplicidade) =====")
-        log(f"Preprocess: {champion['preprocess']} | Params: {champion['preprocess_params']}")
-        log(f"Modelo: {champion['model']} | Hiperparâmetros: {champion['model_params']}")
-        log(f"MAE={champion['MAE']:.6g} | RMSE={champion['RMSE']:.6g} | MAPE={champion['MAPE']:.6g} | sMAPE={champion['sMAPE']:.6g}")
-
-        # ========= PATCH: gerar forecast_df e backtest e anexar nas attrs =========
-        # seleciona transform conforme preprocess do campeão
-        prep = str(champion.get("preprocess", "original")).lower()
-        fwd_transform, inv_transform = (None, None)
-        if prep.startswith("log"):
-            fwd_transform, inv_transform, _ = _log_fwd_inv_from_params(
-                base_series,
-                str(champion.get("preprocess_params", ""))
-            )
-
-
-
-    forecast_df, backtest_df = _champion_forecast_and_backtest(
-        base_series=base_series,
-        horizon=horizon,
-        seasonal_period=seasonal_period,
-        champion_row=champion,
-        forward_transform=fwd,
-        inverse_transform=inv
-    )
-
-    # Anexa para o app (págs. 04 e 07)
-    df_out.attrs["champion"] = champion.to_dict()
-    df_out.attrs["forecast_df"] = forecast_df
-    df_out.attrs["forecast_horizon"] = horizon
-    df_out.attrs["backtest"] = backtest_df
-    # ========= /PATCH =========
-
     # Ordenação leve para visualização (não afeta o campeão já escolhido)
     df_out = df_out.sort_values(by=["preprocess","model","MAE","RMSE"]).reset_index(drop=True)
 

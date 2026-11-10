@@ -1,27 +1,30 @@
 # pages/05_Inputs_MPS.py
 from __future__ import annotations
+from core.i18n import ENGLISH, english, tr, month_label
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.title("⚙️ Inputs do MPS")
+option_label = (lambda value: ENGLISH.get(value, value)) if english() else str
+
+st.title(tr('⚙️ Inputs do MPS'))
 
 # =========================
 # GUARDAS DE ETAPA
 # =========================
 if "ts_df_norm" not in st.session_state:
-    st.warning("Preciso da série do Passo 1 (Upload) antes de continuar.")
-    st.page_link("pages/01_Upload.py", label="Ir para o Passo 1 — Upload")
+    st.warning(tr('Preciso da série do Passo 1 (Upload) antes de continuar.'))
+    st.page_link("pages/01_Upload.py", label=tr('Ir para o Passo 1 — Upload'))
     st.stop()
 
 if not st.session_state.get("forecast_committed", False):
-    st.warning("Preciso que você **salve a previsão** no Passo 2 (Previsão) antes de configurar os inputs.")
-    st.page_link("pages/04_Previsao.py", label="Ir para o Passo 2 — Previsão")
+    st.warning(tr('Preciso que você **salve a previsão** no Passo 2 (Previsão) antes de configurar os inputs.'))
+    st.page_link("pages/04_Previsao.py", label=tr('Ir para o Passo 2 — Previsão'))
     st.stop()
 
 if "forecast_df" not in st.session_state or "forecast_h" not in st.session_state:
-    st.error("Previsão não encontrada no estado. Volte ao Passo 2, salve a previsão e retorne.")
-    st.page_link("pages/04_Previsao.py", label="Ir para o Passo 2 — Previsão")
+    st.error(tr('Previsão não encontrada no estado. Volte ao Passo 2, salve a previsão e retorne.'))
+    st.page_link("pages/04_Previsao.py", label=tr('Ir para o Passo 2 — Previsão'))
     st.stop()
 
 # =========================
@@ -44,41 +47,43 @@ labels_raw: list[pd.Timestamp] = ds_ts.tolist()          # valores "reais"
 labels_str: list[str] = [fmt_mmyy(ts) for ts in ds_ts]    # rótulos para UI
 idx_by_label_str = {s: i for i, s in enumerate(labels_str)}
 
-st.caption(f"🔗 Horizonte atual da Previsão: **{horizon} meses**.")
+st.caption(tr('🔗 Horizonte atual da Previsão: **{0} meses**.', horizon))
 
 # defaults
 defaults = st.session_state.get("mps_inputs", {})
-def get(k, dv): return defaults.get(k, dv)
+def get(k, dv):
+    value = defaults.get(k)
+    return dv if value is None else value
 
 # =========================
 # 1) ITEM E POLÍTICAS PADRÃO
 # =========================
-st.subheader("1) Item e políticas padrão")
+st.subheader(tr('1) Item e políticas padrão'))
 c1, c2, c3, c4 = st.columns(4)
 with c1:
     product_name = st.session_state.get("product_name", None)
-    default_item = get("item_name", product_name if product_name else "Item (sem nome)")
-    item_name = st.text_input("Item (nome)", value=default_item)
+    default_item = get("item_name", product_name if product_name else tr('Item (sem nome)'))
+    item_name = st.text_input(tr('Item (nome)'), value=default_item)
 with c2:
     lot_policy_default = st.selectbox(
-        "Política padrão", ["Lote Fixo (FX)", "Lote-a-Lote (L4L)"],
+        tr('Política padrão'), [tr('Lote Fixo (FX)'), tr('Lote-a-Lote (L4L)')],
         index=0 if get("lot_policy_default", "FX") == "FX" else 1
     )
-    lot_policy_default = "FX" if lot_policy_default.startswith("Lote Fixo") else "L4L"
+    lot_policy_default = "FX" if lot_policy_default.startswith(tr('Lote Fixo')) else "L4L"
 with c3:
     lot_size_default = st.number_input(
-        "Tamanho do lote padrão (se FX)", min_value=1, step=10, value=int(get("lot_size_default", 150))
+        tr('Tamanho do lote padrão (se FX)'), min_value=1, step=10, value=int(get("lot_size_default", 150))
     )
 with c4:
     initial_inventory_default = st.number_input(
-        "Estoque em mão inicial (padrão)", min_value=0, step=5, value=int(get("initial_inventory_default", 55))
+        tr('Estoque em mão inicial (padrão)'), min_value=0, step=5, value=int(get("initial_inventory_default", 55))
     )
 
 # Lead time (meses)
 lt1, lt2, lt3, lt4 = st.columns(4, gap="small")
 with lt1:
     lead_time_default = st.number_input(
-        "Lead time (meses)", min_value=0, value=int(get("lead_time_default", 1)), step=1
+        tr('Lead time (meses)'), min_value=0, value=int(get("lead_time_default", 1)), step=1
     )
 with lt2: st.write("")
 with lt3: st.write("")
@@ -87,36 +92,36 @@ with lt4: st.write("")
 # =========================
 # 2) ESTOQUE DE SEGURANÇA — PARÂMETROS
 # =========================
-st.subheader("2) Estoque de segurança — parâmetros")
+st.subheader(tr('2) Estoque de segurança — parâmetros'))
 row = st.columns([1.2, 1, 1])
 with row[0]:
-    auto_ss = st.checkbox("Ativar SS automático (variável por mês)", value=bool(get("auto_ss", True)))
+    auto_ss = st.checkbox(tr('Ativar SS automático (variável por mês)'), value=bool(get("auto_ss", True)))
     ss_method = st.radio(
-        "Método", ["CV (%)", "σ absoluto"],
+        tr('Método'), ["CV (%)", "σ absoluto"], format_func=option_label,
         index=0 if get("ss_method", "CV (%)") == "CV (%)" else 1,
         horizontal=True
     )
 with row[1]:
     z_choice = st.selectbox(
-        "Nível de serviço (z)", ["90%", "95%", "97.5%", "99%"],
+        tr('Nível de serviço (z)'), ["90%", "95%", "97.5%", "99%"],
         index={"90%":0, "95%":1, "97.5%":2, "99%":3}[get("z_choice", "95%")]
     )
 with row[2]:
     if ss_method == "CV (%)":
-        cv_pct = st.number_input("CV da demanda/erro (%)", min_value=0.0, value=float(get("cv_pct", 15.0)), step=1.0)
+        cv_pct = st.number_input(tr('CV da demanda/erro (%)'), min_value=0.0, value=float(get("cv_pct", 15.0) or 0.0), step=1.0)
         sigma_abs = None
     else:
-        sigma_abs = st.number_input("σ absoluto (unid/mês)", min_value=0.0, value=float(get("sigma_abs", 20.0)), step=1.0)
+        sigma_abs = st.number_input(tr('σ absoluto (unid/mês)'), min_value=0.0, value=float(get("sigma_abs", 20.0)), step=1.0)
         cv_pct = None
 
 # =========================
 # 3) CONGELAMENTO DE HORIZONTE (intervalo)
 # =========================
-st.subheader("3) Congelamento de horizonte (intervalo)")
+st.subheader(tr('3) Congelamento de horizonte (intervalo)'))
 start_label_str = labels_str[0]
 
 freeze_on_default = bool(defaults.get("freeze_on", False))
-freeze_on = st.checkbox("Ativar congelamento", value=freeze_on_default)
+freeze_on = st.checkbox(tr('Ativar congelamento'), value=freeze_on_default)
 
 _saved = defaults.get("frozen_range", (start_label_str, start_label_str))
 saved_end_str = _saved[1] if isinstance(_saved, (list, tuple)) and len(_saved) == 2 else start_label_str
@@ -132,20 +137,20 @@ if saved_end_str not in labels_str:
 
 if freeze_on:
     end_label_str = st.select_slider(
-        f"Selecione o **fim** do período a congelar (início fixo em {start_label_str})",
-        options=labels_str,
+        tr('Selecione o **fim** do período a congelar (início fixo em {0})', month_label(start_label_str)),
+        options=labels_str, format_func={v: month_label(v) for v in labels_str}.__getitem__,
         value=saved_end_str,
     )
     frozen_range = (start_label_str, end_label_str)
-    st.caption(f"Período congelado: **{frozen_range[0]} → {frozen_range[1]}**")
+    st.caption(tr('Período congelado: **{0} → {1}**', month_label(frozen_range[0]), month_label(frozen_range[1])))
 else:
     frozen_range = None
-    st.caption("Período congelado: **sem congelamento**")
+    st.caption(tr('Período congelado: **sem congelamento**'))
 
 # =========================
 # 4) PEDIDOS EM CARTEIRA
 # =========================
-st.subheader("4) Pedidos firmes — Em carteira")
+st.subheader(tr('4) Pedidos firmes — Em carteira'))
 
 if "mps_firm_orders" in st.session_state:
     current_orders = st.session_state["mps_firm_orders"].copy()
@@ -156,22 +161,22 @@ if "mps_firm_orders" in st.session_state:
 else:
     current_orders = pd.DataFrame({"ds": labels_raw, "y": [0]*len(labels_raw)})
 
-orders_row_df = pd.DataFrame([current_orders["y"].tolist()], index=["Em carteira"], columns=labels_str)
+orders_row_df = pd.DataFrame([current_orders["y"].tolist()], index=[tr('Em carteira')], columns=labels_str)
 orders_row_df = st.data_editor(
     orders_row_df,
     use_container_width=True,
     num_rows="fixed",
-    column_config={lab: st.column_config.NumberColumn(lab, min_value=0, step=1) for lab in labels_str},
+    column_config={lab: st.column_config.NumberColumn(month_label(lab), min_value=0, step=1) for lab in labels_str},
     key="orders_row_inputs_mps",
 )
 orders_row_df = orders_row_df.fillna(0)
-values = orders_row_df.loc["Em carteira"].astype(int).reindex(labels_str).tolist()
+values = orders_row_df.loc[tr('Em carteira')].astype(int).reindex(labels_str).tolist()
 orders_df = pd.DataFrame({"ds": labels_raw, "y": values})
 
 # =========================
 # 5)  Parâmetros de custos (nomenclatura da aula)
 # =========================
-st.subheader("5) Parâmetros de custos")
+st.subheader(tr('5) Parâmetros de custos'))
 
 def _as_float(x, default=0.0) -> float:
     try:
@@ -183,20 +188,20 @@ def _as_float(x, default=0.0) -> float:
 
 # Base de tempo
 time_base = st.radio(
-    "Base de tempo dos parâmetros (para D, H e r):",
-    options=["por mês", "por ano"],
+    tr('Base de tempo dos parâmetros (para D, H e r):'),
+    options=["por mês", "por ano"], format_func=option_label,
     index=0 if get("time_base", "por mês") == "por mês" else 1,
     horizontal=True,
-    help="A conversão, se necessária, será feita na página de conclusão."
+    help=tr('A conversão, se necessária, será feita na página de conclusão.')
 )
 
 # A (setup), D (taxa de demanda), p (taxa de produção)
 cA, cD, cP = st.columns(3)
 with cA:
     A = st.number_input(
-        "A — Custo fixo por setup (R$)",
+        tr('A — Custo fixo por setup (R$)'),
         min_value=0.0, step=10.0, value=_as_float(get("A", 0.0), 0.0),
-        help="Custo fixo cada vez que prepara a produção (setup)."
+        help=tr('Custo fixo cada vez que prepara a produção (setup).')
     )
 with cD:
     # D vem da média da previsão (já calculada na página de previsão); exibimos somente-leitura
@@ -204,21 +209,21 @@ with cD:
     D_media_mes = float(fcst_df["y"].mean()) if len(fcst_df) else 0.0
     D = D_media_mes if time_base == "por mês" else D_media_mes * 12.0
     st.number_input(
-        f"D — Taxa de demanda (unid/{'mês' if time_base=='por mês' else 'ano'})",
+        tr('D — Taxa de demanda (unid/{0})', tr("mês") if time_base == "por mês" else tr("ano")),
         value=float(D), step=1.0, min_value=0.0, disabled=True,
-        help="Média da demanda prevista no horizonte atual."
+        help=tr('Média da demanda prevista no horizonte atual.')
     )
 with cP:
     p = st.number_input(
-        f"p — Taxa de produção (unid/{'mês' if time_base=='por mês' else 'ano'})",
+        tr('p — Taxa de produção (unid/{0})', tr("mês") if time_base == "por mês" else tr("ano")),
         min_value=0.0, step=1.0, value=_as_float(get("p", 0.0), 0.0),
-        help="Capacidade de produção (EPQ exige p > D)."
+        help=tr('Capacidade de produção (EPQ exige p > D).')
     )
 
 # H — custo de manter (direto) ou via r·v
 h_mode = st.radio(
-    "Como deseja informar H?",
-    options=["Informar H diretamente", "Calcular H a partir de r e v"],
+    tr('Como deseja informar H?'),
+    options=["Informar H diretamente", "Calcular H a partir de r e v"], format_func=option_label,
     index=0 if get("h_mode", "Informar H diretamente") == "Informar H diretamente" else 1,
     horizontal=True
 )
@@ -228,39 +233,39 @@ v_default = _as_float(get("v", None), _as_float(get("unit_cost", 0.0), 0.0))
 colV, colH1, colH2 = st.columns(3)
 with colV:
     v = st.number_input(
-        "v — Valor unitário do item (R$/unid) **(obrigatório)**",
+        tr('v — Valor unitário do item (R$/unid) **(obrigatório)**'),
         min_value=0.0, step=1.0, value=float(v_default),
-        help="Usado em C_prod = v·D e, se escolher, em H = r·v."
+        help=tr('Usado em C_prod = v·D e, se escolher, em H = r·v.')
     )
 
 if h_mode == "Informar H diretamente":
     with colH1:
         H = st.number_input(
-            f"H — Custo de manter (R$ por unid/{'mês' if time_base=='por mês' else 'ano'})",
+            tr('H — Custo de manter (R$ por unid/{0})', tr("mês") if time_base == "por mês" else tr("ano")),
             min_value=0.0, step=1.0, value=_as_float(get("H", 0.0), 0.0),
-            help="Se preferir informar H direto, ainda assim v é obrigatório para os demais cálculos."
+            help=tr('Se preferir informar H direto, ainda assim v é obrigatório para os demais cálculos.')
         )
     r = get("r", None)  # opcional (não usado)
 else:
     with colH1:
         r = st.number_input(
-            f"r — Taxa de manutenção (R$/$ por {'mês' if time_base=='por mês' else 'ano'})",
+            tr('r — Taxa de manutenção (R$/$ por {0})', tr("mês") if time_base == "por mês" else tr("ano")),
             min_value=0.0, step=0.01, value=_as_float(get("r", 0.20 if time_base=='por ano' else 0.02), 0.0),
-            help="Taxa multiplicada por v para obter H = r·v."
+            help=tr('Taxa multiplicada por v para obter H = r·v.')
         )
     H = None  # será calculado na conclusão
 
 # (opcional) Custo de falta / ruptura por unidade
 pi_shortage = st.number_input(
-    "π — Custo de falta/ruptura (R$ por unidade não atendida)",
+    tr('π — Custo de falta/ruptura (R$ por unidade não atendida)'),
     min_value=0.0, step=1.0, value=_as_float(get("pi_shortage", get("shortage_cost", 0.0)), 0.0),
-    help="Opcional. Se informado, será usado para penalizar rupturas no horizonte."
+    help=tr('Opcional. Se informado, será usado para penalizar rupturas no horizonte.')
 )
 
 # =========================
 # SALVAR
 # =========================
-if st.button("Salvar inputs do MPS", type="primary"):
+if st.button(tr('Salvar inputs do MPS'), type="primary"):
     # ponto de partida: preserva o que já havia
     new_cfg = dict(st.session_state.get("mps_inputs", {}))
 
@@ -322,12 +327,12 @@ if st.button("Salvar inputs do MPS", type="primary"):
     st.session_state["mps_inputs"] = new_cfg
     st.session_state["mps_firm_orders"] = orders_df.copy()
 
-    st.success("Inputs do MPS salvos com sucesso! ✅")
+    st.success(tr('Inputs do MPS salvos com sucesso! ✅'))
 
 # -------- Navegação --------
 st.divider()
 c_back, c_next = st.columns([1, 1], gap="large")
 with c_back:
-    st.page_link("pages/04_Previsao.py", label="⬅️ Retornar para Previsão")
+    st.page_link("pages/04_Previsao.py", label=tr('⬅️ Retornar para Previsão'))
 with c_next:
-    st.page_link("pages/06_MPS.py", label="➡️ Ir para MPS (Plano Mestre de Produção)")
+    st.page_link("pages/06_MPS.py", label=tr('➡️ Ir para MPS (Plano Mestre de Produção)'))

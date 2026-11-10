@@ -1,19 +1,24 @@
 # pages/02_Serie_Temporal.py
 from __future__ import annotations
+from core.i18n import tr
 import numpy as np
 import pandas as pd
 import streamlit as st
 import altair as alt
 
-st.title("📈 Série Temporal — Análise Exploratória")
+st.title(tr('📈 Série Temporal — Análise Exploratória'))
 
 # --- guarda de etapa: precisa ter feito o Upload ---
 if "ts_df_norm" not in st.session_state:
-    st.warning("Preciso da série do Passo 1 (Upload) antes de continuar.")
-    st.page_link("pages/01_Upload.py", label="Ir para o Passo 1 — Upload")
+    st.warning(tr('Preciso da série do Passo 1 (Upload) antes de continuar.'))
+    st.page_link("pages/01_Upload.py", label=tr('Ir para o Passo 1 — Upload'))
     st.stop()
 
 # ---------------------------------------------------------------------
+if st.session_state.get("series_source") == "sample":
+    st.caption(tr("Exemplo sintético · 72 meses"))
+    st.page_link("pages/04_Previsao.py", label=tr("Ir direto para a previsão"), icon="🔮")
+
 # 0) Entrada (ds, y) do Passo 1
 # ---------------------------------------------------------------------
 df = st.session_state["ts_df_norm"].copy()  # colunas: ds (ex.: 'Set/25'), y (quantidade)
@@ -22,7 +27,7 @@ df = st.session_state["ts_df_norm"].copy()  # colunas: ds (ex.: 'Set/25'), y (qu
 # helpers de data
 # ---------------------------------------------------------------------
 _PT = {"Jan":1,"Fev":2,"Mar":3,"Abr":4,"Mai":5,"Jun":6,"Jul":7,"Ago":8,"Set":9,"Out":10,"Nov":11,"Dez":12}
-_REV_PT = {v:k for k, v in _PT.items()}
+_REV_PT = {v: tr(k) for k, v in _PT.items()}
 
 def label_to_period(lbl: str) -> pd.Period:
     mon = lbl[:3].title()
@@ -67,11 +72,10 @@ y_filled = fill_missing_neighbors_with_linear_fallback(y)
 n_missing_orig = int(y.isna().sum())
 if n_missing_orig > 0:
     st.caption(
-        f"🔧 Dados faltantes tratados por **média dos vizinhos imediatos** "
-        f"Meses faltantes originais: {n_missing_orig}."
+        tr('🔧 Dados faltantes tratados por **média dos vizinhos imediatos** Meses faltantes originais: {0}.', n_missing_orig)
     )
 else:
-    st.caption("✅ Série sem faltantes — nenhuma imputação necessária.")
+    st.caption(tr('✅ Série sem faltantes — nenhuma imputação necessária.'))
 
 # ---------------------------------------------------------------------
 # 1) Indicadores descritivos (usando y_filled)
@@ -105,33 +109,33 @@ def cagr_simple(y_series: pd.Series) -> float | None:
 
 cagr = cagr_simple(y_filled)
 
-st.subheader("Análise descritiva")
+st.subheader(tr('Análise descritiva'))
 
 # Linha 1 — KPIs principais
 k1, k2, k3, k4, k5, k6 = st.columns(6)
-k1.metric("Média", f"{mean:.1f}" if mean==mean else "—")
-k2.metric("Mediana", f"{median:.1f}" if median==median else "—")
-k3.metric("Desv. Padrão", f"{std:.1f}" if std==std else "—")
-k4.metric("Mín / Máx", f"{min_:.0f} / {max_:.0f}" if min_==min_ and max_==max_ else "—")
+k1.metric(tr('Média'), f"{mean:.1f}" if mean==mean else "—")
+k2.metric(tr('Mediana'), f"{median:.1f}" if median==median else "—")
+k3.metric(tr('Desv. Padrão'), f"{std:.1f}" if std==std else "—")
+k4.metric(tr('Mín / Máx'), f"{min_:.0f} / {max_:.0f}" if min_==min_ and max_==max_ else "—")
 k5.metric("CV (%)", f"{cv:.1f}" if np.isfinite(cv) else "—")
-k6.metric("Crescimento (~%)", f"{cagr:.1f}" if cagr==cagr else "—")
+k6.metric(tr('Crescimento (~%)'), f"{cagr:.1f}" if cagr==cagr else "—")
 
 # Linha 2 — agora com Zeros (orig.) ANTES de Faltas (orig.)
 k1b, k2b, k3b, k4b, k5b, k6b = st.columns(6)
-k1b.metric("Observações (meses)", f"{n}")
-k2b.metric("Zeros (orig.)", f"{n_zeros_orig} ({pct_zeros:.1f}%)")
-k3b.metric("Faltas (orig.)", f"{n_missing} ({pct_missing:.1f}%)")
-k4b.metric("Zeros (após imputação)", f"{n_zeros}")  # opcional; remova se não quiser exibir
+k1b.metric(tr('Observações (meses)'), f"{n}")
+k2b.metric(tr('Zeros (orig.)'), f"{n_zeros_orig} ({pct_zeros:.1f}%)")
+k3b.metric(tr('Faltas (orig.)'), f"{n_missing} ({pct_missing:.1f}%)")
+k4b.metric(tr('Zeros (após imputação)'), f"{n_zeros}")  # opcional; remova se não quiser exibir
 # (k5b e k6b vazios para manter alinhamento)
 
 st.caption(
-    "CV = desvio padrão / média. Crescimento (~%) compara médias do início e do fim da série para suavizar ruído."
+    tr('CV = desvio padrão / média. Crescimento (~%) compara médias do início e do fim da série para suavizar ruído.')
 )
 
 # ---------------------------------------------------------------------
 # 2) Gráfico da série
 # ---------------------------------------------------------------------
-st.subheader("Série mensal")
+st.subheader(tr('Série mensal'))
 st.line_chart(df_full.assign(y=y_filled).set_index("ts")["y"], height=300, use_container_width=True)
 
 # ---------------------------------------------------------------------
@@ -144,7 +148,7 @@ df_plot["mes_lab"] = df_plot["p"].apply(period_to_label)
 colL, colR = st.columns(2)
 
 with colL:
-    st.markdown("**Histograma da demanda (interativo)**")
+    st.markdown(tr('**Histograma da demanda (interativo)**'))
     hist = (
         alt.Chart(df_plot.dropna(subset=["y"]))
         .mark_bar()
@@ -158,7 +162,7 @@ with colL:
     st.altair_chart(hist, use_container_width=True)
 
 with colR:
-    st.markdown("**Boxplot por mês (Jan–Dez)**")
+    st.markdown(tr('**Boxplot por mês (Jan–Dez)**'))
     df_plot["mes_num"] = df_plot["p"].dt.month
     df_plot["mes_lab"] = df_plot["mes_num"].map(_REV_PT)
 
@@ -166,8 +170,8 @@ with colR:
         alt.Chart(df_plot.dropna(subset=["y"]))
         .mark_boxplot(size=30)
         .encode(
-            x=alt.X("mes_lab:N", title="Mês", sort=list(_REV_PT.values())),
-            y=alt.Y("y:Q", title="Demanda"),
+            x=alt.X("mes_lab:N", title=tr('Mês'), sort=list(_REV_PT.values())),
+            y=alt.Y("y:Q", title=tr('Demanda')),
             tooltip=["mes_lab:N", "y:Q"]
         )
         .properties(height=300)
@@ -177,15 +181,15 @@ with colR:
 # ---------------------------------------------------------------------
 # 4) Tendência e Sazonalidade (periodicidade mensal = 12)
 # ---------------------------------------------------------------------
-st.subheader("Tendência e Sazonalidade")
+st.subheader(tr('Tendência e Sazonalidade'))
 try:
     from statsmodels.tsa.seasonal import seasonal_decompose
     y_clean = y_filled
     result = seasonal_decompose(y_clean, model="additive", period=12, extrapolate_trend="freq")
 
     ts_index = df_full["ts"]
-    trend_df = pd.DataFrame({"ts": ts_index, "Tendência": result.trend})
-    seas_df  = pd.DataFrame({"ts": ts_index, "Sazonalidade": result.seasonal})
+    trend_df = pd.DataFrame({"ts": ts_index, tr('Tendência'): result.trend})
+    seas_df  = pd.DataFrame({"ts": ts_index, tr('Sazonalidade'): result.seasonal})
 
     cA, cB = st.columns(2)
     with cA:
@@ -194,34 +198,32 @@ try:
         st.line_chart(seas_df.set_index("ts"), height=260, use_container_width=True)
 
 except Exception as e:
-    st.info("Para exibir tendência e sazonalidade, é necessário `statsmodels`. "
-            "Se já estiver instalado, talvez a série esteja curta ou com poucos pontos válidos.")
-    st.caption(f"Detalhe técnico: {e}")
+    st.info(tr('Para exibir tendência e sazonalidade, é necessário `statsmodels`. Se já estiver instalado, talvez a série esteja curta ou com poucos pontos válidos.'))
+    st.caption(tr('Detalhe técnico: {0}', e))
 
 # ---------------------------------------------------------------------
 # 5) Qualidade dos dados (resumo textual + tabela de outliers)
 # ---------------------------------------------------------------------
-st.subheader("Qualidade dos Dados")
+st.subheader(tr('Qualidade dos Dados'))
 
 # Faltas (com base no original y)
 missing_df = df_full.loc[y.isna(), ["p"]].copy()
-missing_df["Mês"] = missing_df["p"].apply(period_to_label)
-missing_list = ", ".join(missing_df["Mês"].tolist())
+missing_df[tr('Mês')] = missing_df["p"].apply(period_to_label)
+missing_list = ", ".join(missing_df[tr('Mês')].tolist())
 
 # Outliers (IQR) com base na série imputada
 low_thr, high_thr = q1 - 1.5*(q3-q1), q3 + 1.5*(q3-q1)
 outliers_mask = (y_filled < low_thr) | (y_filled > high_thr)
 outliers_df = df_full.loc[outliers_mask, ["p"]].copy()
-outliers_df["Mês"] = outliers_df["p"].apply(period_to_label)
-outliers_df["Quantidade"] = y_filled.loc[outliers_df.index].values
-outliers_df = outliers_df[["Mês","Quantidade"]]
+outliers_df[tr('Mês')] = outliers_df["p"].apply(period_to_label)
+outliers_df[tr('Quantidade')] = y_filled.loc[outliers_df.index].values
+outliers_df = outliers_df[[tr('Mês'),tr('Quantidade')]]
 
-st.markdown(f"**Dados faltando (originais):** {len(missing_df)}"
-            + (f" — meses: {missing_list}" if len(missing_df) else ""))
+st.markdown(tr('**Dados faltando (originais):** {0}', len(missing_df))
+            + (tr(' — meses: {0}', missing_list) if len(missing_df) else ""))
 
 st.markdown(
-    f"**Outliers (IQR, após imputação):** **{len(outliers_df)}** ocorrência(s) "
-    f"(limiares: baixo < {low_thr:.1f} | alto > {high_thr:.1f} — Q1={q1:.1f}, Q3={q3:.1f}, IQR={iqr:.1f})."
+    tr('**Outliers (IQR, após imputação):** **{0}** ocorrência(s) (limiares: baixo < {1} | alto > {2} — Q1={3}, Q3={4}, IQR={5}).', len(outliers_df), f'{low_thr:.1f}', f'{high_thr:.1f}', f'{q1:.1f}', f'{q3:.1f}', f'{iqr:.1f}')
 )
 
 if len(outliers_df):
@@ -232,17 +234,14 @@ if len(outliers_df):
 # ---------------------------------------------------------------------
 st.divider()
 st.markdown(
-    "### Próximo passo\n"
-    "Você pode seguir direto para a **Previsão** ou, se preferir, abrir uma **Análise detalhada** "
-    "(teste de estacionariedade ADF/KPSS, heterocedasticidade , ACF/PACF, etc.). "
-    "**Atenção:** esta análise é mais técnica e voltada a quem tem familiaridade com métodos de séries temporais."
+    tr('### Próximo passo\nVocê pode seguir direto para a **Previsão** ou, se preferir, abrir uma **Análise detalhada** (teste de estacionariedade ADF/KPSS, heterocedasticidade , ACF/PACF, etc.). **Atenção:** esta análise é mais técnica e voltada a quem tem familiaridade com métodos de séries temporais.')
 )
 
 col_flag, col_btn = st.columns([2, 1])
 with col_flag:
-    want_robust = st.checkbox("Quero ver a **Análise detalhada (técnica)** antes da previsão", value=False)
+    want_robust = st.checkbox(tr('Quero ver a **Análise detalhada (técnica)** antes da previsão'), value=False)
 with col_btn:
-    go_next = st.button("Continuar", type="primary")
+    go_next = st.button(tr('Continuar'), type="primary")
 
 ROBUST_PAGE   = "pages/03_Analise_Detalhada.py"
 PREVISAO_PAGE = "pages/04_Previsao.py"
@@ -252,5 +251,5 @@ if go_next:
     try:
         st.switch_page(target)
     except Exception:
-        st.info("Abrindo o próximo passo pelo menu lateral.")
-        st.page_link(target, label="Abrir próxima página")
+        st.info(tr('Abrindo o próximo passo pelo menu lateral.'))
+        st.page_link(target, label=tr('Abrir próxima página'))

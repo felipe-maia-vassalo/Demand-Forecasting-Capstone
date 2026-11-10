@@ -1,5 +1,6 @@
 # pages/06_MPS.py
 from __future__ import annotations
+from core.i18n import tr, month_label
 import io
 import sys
 import inspect
@@ -11,29 +12,29 @@ import streamlit as st
 # (ajuste o caminho da sua página final)
 CONCLUSAO_PAGE = "pages/07_Dashboard_Conclusao.py"
 
-st.title("🗓️ MPS — Plano Mestre de Produção (mensal)")
+st.title(tr('🗓️ MPS — Plano Mestre de Produção (mensal)'))
 
 # =========================
 # Guardas de etapa
 # =========================
 if "ts_df_norm" not in st.session_state:
-    st.warning("Preciso da série do Passo 1 (Upload) antes de continuar.")
-    st.page_link("pages/01_Upload.py", label="Ir para o Passo 1 — Upload")
+    st.warning(tr('Preciso da série do Passo 1 (Upload) antes de continuar.'))
+    st.page_link("pages/01_Upload.py", label=tr('Ir para o Passo 1 — Upload'))
     st.stop()
 
 if not st.session_state.get("forecast_committed", False):
-    st.warning("Preciso que você **salve a previsão** no Passo 2 (Previsão) antes de abrir o MPS.")
-    st.page_link("pages/04_Previsao.py", label="Ir para o Passo 2 — Previsão")
+    st.warning(tr('Preciso que você **salve a previsão** no Passo 2 (Previsão) antes de abrir o MPS.'))
+    st.page_link("pages/04_Previsao.py", label=tr('Ir para o Passo 2 — Previsão'))
     st.stop()
 
 if "forecast_df" not in st.session_state or "forecast_h" not in st.session_state:
-    st.error("Previsão não encontrada no estado. Volte ao Passo 2 e salve a previsão.")
-    st.page_link("pages/04_Previsao.py", label="Ir para o Passo 2 — Previsão")
+    st.error(tr('Previsão não encontrada no estado. Volte ao Passo 2 e salve a previsão.'))
+    st.page_link("pages/04_Previsao.py", label=tr('Ir para o Passo 2 — Previsão'))
     st.stop()
 
 if "mps_inputs" not in st.session_state:
-    st.warning("Antes do MPS, configure os **Inputs do MPS**.")
-    st.page_link("pages/05_Inputs_MPS.py", label="Ir para 05_Inputs_MPS")
+    st.warning(tr('Antes do MPS, configure os **Inputs do MPS**.'))
+    st.page_link("pages/05_Inputs_MPS.py", label=tr('Ir para 05_Inputs_MPS'))
     st.stop()
 
 # =========================
@@ -81,9 +82,7 @@ orders_df["y"] = orders_df["y"].astype(int)
 
 # Aviso
 st.info(
-    "Todos os parâmetros abaixo **vêm da página anterior, Inputs MPS**. "
-    "Para ajustar política, tamanhos de lote, estoque em mão, lead time, "
-    "estoque de segurança, pedidos em carteira e congelamento, volte à página de inputs.",
+    tr('Todos os parâmetros abaixo **vêm da página anterior, Inputs MPS**. Para ajustar política, tamanhos de lote, estoque em mão, lead time, estoque de segurança, pedidos em carteira e congelamento, volte à página de inputs.'),
     icon="ℹ️",
 )
 
@@ -174,18 +173,19 @@ st.session_state["mps_tbl_display"] = display_tbl.copy()
 st.session_state["mps_detail"] = mps_df.copy()
 
 
-st.subheader("📅 MPS — Visualização Mensal")
+st.subheader(tr('📅 MPS — Visualização Mensal'))
 
 # Altura dinâmica para não aparecer “linha em branco” (preenchimento do grid)
 row_height_px = 38
 header_px = 38
 grid_height = header_px + row_height_px * (len(display_tbl.index))
-st.dataframe(display_tbl, use_container_width=True, height=grid_height)
+localized_table = display_tbl.rename(index=tr, columns=month_label)
+st.dataframe(localized_table, use_container_width=True, height=grid_height)
 
 # =========================
 # Parâmetros aplicados (KPI)
 # =========================
-st.subheader("Parâmetros aplicados")
+st.subheader(tr('Parâmetros aplicados'))
 st.markdown("""
 <style>
 .kpi {display:flex; flex-direction:column; gap:2px;}
@@ -195,21 +195,21 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-policy_label = "Lote Fixo (FX)" if lot_policy == "FX" else "Lote-a-Lote (L4L)"
-lot_size_display = "Variável" if lot_policy == "L4L" else f"{lot_size}"
+policy_label = tr('Lote Fixo (FX)') if lot_policy == "FX" else tr('Lote-a-Lote (L4L)')
+lot_size_display = tr('Variável') if lot_policy == "L4L" else f"{lot_size}"
 
 c1, c2, c3, c4, c5 = st.columns([1.6, 1, 1, 1, 1])
-c1.markdown(f'<div class="kpi"><small>Política</small><div class="value sm">{policy_label}</div></div>', unsafe_allow_html=True)
-c2.markdown(f'<div class="kpi"><small>Tamanho do lote</small><div class="value">{lot_size_display}</div></div>', unsafe_allow_html=True)
-c3.markdown(f'<div class="kpi"><small>Estoque inicial</small><div class="value">{initial_inventory}</div></div>', unsafe_allow_html=True)
-c4.markdown(f'<div class="kpi"><small>Lead time (meses)</small><div class="value">{lead_time}</div></div>', unsafe_allow_html=True)
-c5_mark = "Sim" if auto_ss else "Não"
-c5.markdown(f'<div class="kpi"><small>SS automático</small><div class="value">{c5_mark}</div></div>', unsafe_allow_html=True)
+c1.markdown(tr('<div class="kpi"><small>Política</small><div class="value sm">{0}</div></div>', policy_label), unsafe_allow_html=True)
+c2.markdown(tr('<div class="kpi"><small>Tamanho do lote</small><div class="value">{0}</div></div>', lot_size_display), unsafe_allow_html=True)
+c3.markdown(tr('<div class="kpi"><small>Estoque inicial</small><div class="value">{0}</div></div>', initial_inventory), unsafe_allow_html=True)
+c4.markdown(tr('<div class="kpi"><small>Lead time (meses)</small><div class="value">{0}</div></div>', lead_time), unsafe_allow_html=True)
+c5_mark = tr('Sim') if auto_ss else tr('Não')
+c5.markdown(tr('<div class="kpi"><small>SS automático</small><div class="value">{0}</div></div>', c5_mark), unsafe_allow_html=True)
 
 if no_freeze:
-    st.caption("Período congelado: **sem congelamento**")
+    st.caption(tr('Período congelado: **sem congelamento**'))
 else:
-    st.caption(f"Período congelado: **{fmt_mes_ano(frozen_range[0])} → {fmt_mes_ano(frozen_range[1])}**")
+    st.caption(tr('Período congelado: **{0} → {1}**', fmt_mes_ano(frozen_range[0]), fmt_mes_ano(frozen_range[1])))
 
 # =========================
 # Exportação Excel
@@ -225,20 +225,20 @@ def to_excel_bytes(
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         # Exporta com as datas originais (não formatadas) para manter precisão
         df_display.to_excel(writer, sheet_name="MPS", index=True)
-        fcst.to_excel(writer, sheet_name="Previsão", index=False)
-        orders_df.to_excel(writer, sheet_name="Em_carteira", index=False)
-        mps_df.to_excel(writer, sheet_name="Detalhe", index=False)
+        fcst.to_excel(writer, sheet_name=tr('Previsão'), index=False)
+        orders_df.to_excel(writer, sheet_name=tr('Em_carteira'), index=False)
+        mps_df.to_excel(writer, sheet_name=tr('Detalhe'), index=False)
         if ss_series is not None:
             pd.DataFrame({"ds": ss_series.index, "ss": ss_series.values}).to_excel(
-                writer, sheet_name="Estoque_Seguranca", index=False
+                writer, sheet_name=tr('Estoque_Seguranca'), index=False
             )
     buf.seek(0)
     return buf.getvalue()
 
 st.download_button(
-    "⬇️ Baixar MPS (Excel)",
-    data=to_excel_bytes(display_tbl, fcst, mps_df, orders_df, ss_series),
-    file_name=f"MPS_mensal_h{horizon}.xlsx",
+    tr('⬇️ Baixar MPS (Excel)'),
+    data=to_excel_bytes(localized_table, fcst, mps_df, orders_df, ss_series),
+    file_name=tr('MPS_mensal_h{0}.xlsx', horizon),
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 )
 
@@ -246,6 +246,6 @@ st.divider()
 
 c_back, c_next = st.columns(2)
 with c_back:
-    st.page_link("pages/05_Inputs_MPS.py", label="⬅️ Voltar: Inputs do MPS")
+    st.page_link("pages/05_Inputs_MPS.py", label=tr('⬅️ Voltar: Inputs do MPS'))
 with c_next:
-    st.page_link(CONCLUSAO_PAGE, label="➡️ Avançar: Conclusão")
+    st.page_link(CONCLUSAO_PAGE, label=tr('➡️ Avançar: Conclusão'))
